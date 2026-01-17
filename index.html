@@ -1,0 +1,1088 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>ГМП «Водопровод»</title>
+  <style>
+    :root { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
+    body { margin:0; background:#0b0c10; color:#e8e8e8; }
+    .wrap { display:grid; grid-template-columns: 520px 1fr; gap:12px; padding:12px; height:100vh; box-sizing:border-box; }
+    .panel{ background:#14161c; border:1px solid #262a35; border-radius:12px; padding:12px; display:flex; flex-direction:column; gap:10px; overflow:auto; }
+    h2{ margin:0; font-size:16px; }
+    .hint{ font-size:12px; color:#b7bcc9; line-height:1.35; }
+    button{ background:#1d2230; border:1px solid #2a3040; color:#e8e8e8; border-radius:12px; padding:9px 12px; cursor:pointer; }
+    button:hover{ background:#232a3a; }
+    button:disabled{ opacity:.55; cursor:not-allowed; }
+    .row{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    .stat{ background:#0f1117; border:1px solid #2a3040; border-radius:12px; padding:10px; font-size:13px; line-height:1.45; }
+    .bar{ height:10px; background:#0f1117; border:1px solid #2a3040; border-radius:999px; overflow:hidden; }
+    .bar > div{ height:100%; width:0%; background:#7daaFF; }
+    .canvasWrap{ background:#0b0c10; border:1px solid #262a35; border-radius:12px; overflow:hidden; position:relative; display:grid; place-items:center; }
+    canvas{ display:block; background:#0b0c10; }
+    .chipRow{ position:absolute; left:10px; top:10px; right:10px; display:flex; gap:8px; justify-content:space-between; pointer-events:none; }
+    .chip{ background:rgba(20,22,28,.88); border:1px solid rgba(42,48,64,.9); padding:6px 10px; border-radius:999px; font-size:12px; color:#b7bcc9; backdrop-filter: blur(6px); }
+    .chip strong{ color:#e8e8e8; font-weight:650; }
+    .kbd{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size:11px; padding:1px 6px; border:1px solid #2a3040; border-radius:6px; color:#b7bcc9; }
+    .ok{ color:#76e39a; } .warn{ color:#ffd27d; } .bad{ color:#ff7d7d; }
+    .groupTitle{ margin-top:6px; font-size:13px; color:#cfd3dd; }
+    .btnRed{ border-color: rgba(255,120,120,.45); }
+    .btnBlue{ border-color: rgba(125,170,255,.45); }
+    .btnObs{ border-color: rgba(190,130,255,.55); }
+    .btnGreen{ border-color: rgba(120,227,154,.55); }
+    .btnGold{ border-color: rgba(255,210,125,.55); }
+    .btnDanger{ border-color: rgba(255,125,125,.55); }
+    .activeBtn{ outline: 2px solid rgba(255,255,255,0.18); }
+    .overlay{ position:absolute; left:0; right:0; bottom:0; padding:12px; display:none; justify-content:center; pointer-events:auto; }
+    .overlayCard{ max-width: 760px; background: rgba(20,22,28,.92); border: 1px solid rgba(42,48,64,.95); border-radius: 14px; padding: 12px 12px 10px; backdrop-filter: blur(8px); box-shadow: 0 10px 40px rgba(0,0,0,.35); }
+    .overlayText{ font-size: 13px; color:#cfd3dd; line-height:1.35; margin-bottom: 10px; white-space: pre-line; }
+    .overlayActions{ display:flex; justify-content:flex-end; gap:8px; }
+    .hint-link { color: #ff6600; text-decoration: none; cursor: pointer; }
+    .hint-link:hover { color: #ff0039; text-decoration: none; cursor: pointer; }
+    .hint-link:visited { color: #2a7fff; text-decoration: none; cursor: pointer; }
+    .hint-link:active { color: #cc0000; text-decoration: none; cursor: pointer; }
+
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="panel">
+    <h2>Управление</h2>
+    <div class="hint">
+      Рисование: зажми ЛКМ и веди. <span class="kbd">Esc</span> — сбросить текущий штрих.<br/>
+      Undo/Redo: <span class="kbd">Ctrl/Cmd</span>+<span class="kbd">Z</span> / <span class="kbd">Ctrl/Cmd</span>+<span class="kbd">Y</span><br/>
+      Режимы: <span class="kbd">1</span> — левая, <span class="kbd">2</span> — правая, <span class="kbd">3</span> — препятствия,
+      <span class="kbd">4</span> — старт, <span class="kbd">5</span> — финиш.<br/>
+      Лимит фиксированный: <strong>1300 px</strong>. Препятствий: <strong>макс. 10 штрихов</strong>.
+    </div>
+
+    <div class="groupTitle">Ластик</div>
+    <div class="row">
+      <button id="eraseLeft" class="btnRed">Ластик левой</button>
+      <button id="eraseRight" class="btnBlue">Ластик правой</button>
+      <button id="eraseObs" class="btnObs">Ластик препятствий</button>
+    </div>
+
+    <div class="groupTitle">Дорисовать/Поставить/Переставить</div>
+    <div class="row">
+      <button id="drawLeft" class="btnRed">Левую (1)</button>
+      <button id="drawRight" class="btnBlue">Правую (2)</button>
+      <button id="drawObs" class="btnObs">Препятствия (3)</button>
+    </div>
+    <div class="row">
+      <button id="placeStart" class="btnGreen">Поставить старт (4)</button>
+      <button id="placeFinish" class="btnGold">Поставить финиш (5)</button>
+    </div>
+
+    <div class="groupTitle">История</div>
+    <div class="row">
+      <button id="undo" disabled>Отменить</button>
+      <button id="redo" disabled>Повторить</button>
+    </div>
+
+    <div class="groupTitle">Очистка</div>
+    <div class="row">
+      <button id="clearAll" class="btnDanger" disabled>Очистить лист</button>
+      <button id="clearLeft" class="btnRed" disabled>Очистить левую</button>
+      <button id="clearRight" class="btnBlue" disabled>Очистить правую</button>
+      <button id="clearObs" class="btnObs" disabled>Очистить препятствия</button>
+    </div>
+
+    <div class="groupTitle">Экспорт</div>
+    <div class="row">
+      <button id="saveImg" disabled>Сохранить картинку</button>
+    </div>
+
+    <div class="bar"><div id="barFill"></div></div>
+    <div class="stat" id="stats"></div>
+
+    <div class="hint">
+      Препятствия можно рисовать где угодно и пересекать одну из границ.<br>
+      Препятствие не должно пересекать и левую, и правую границу.<br>
+      Видео-пример:
+      <a href="https://example.com" target="_blank" class="hint-link">смотреть</a>
+    </div>
+  </div>
+
+  <div class="canvasWrap" id="canvasWrap">
+    <div class="chipRow">
+      <div class="chip" id="modeChip">Режим: <strong>загрузка фона</strong></div>
+      <div class="chip">
+        Левая: <strong style="color:#ff7d7d">красная</strong> •
+        Правая: <strong style="color:#7daaFF">синяя</strong> •
+        Препятствия: <strong style="color:#be82ff">фиолетовые</strong> •
+        START/FINISH: <strong style="color:#76e39a">зелёный</strong>/<strong style="color:#ffd27d">золотой</strong>
+      </div>
+    </div>
+
+    <canvas id="cv"></canvas>
+
+    <div class="overlay" id="overlay">
+      <div class="overlayCard">
+        <div class="overlayText" id="overlayText"></div>
+        <div class="overlayActions">
+          <button id="overlayOk">Хорошо</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const BACKGROUND_SRC = "img/map.png";
+  const MAX_TOTAL = 1300;
+  const MAX_OBS_STROKES = 10;
+
+  const ERASE_RADIUS_PX = 16;
+  const DRAW_WIDTH_SCREEN = 4;
+
+  const START_FINISH_RADIUS_SCREEN = 10;
+  const START_FINISH_STROKE_SCREEN = 3;
+
+  const MIN_SEG_LINES = 0.6;
+  const MIN_SEG_OBS = 0.02;
+
+  const INTERP_STEP_PX = 0.25;
+  const TOUCH_EPS_PX = 0.55;
+
+  const COLORS = {
+    left:  'rgba(255,120,120,0.95)',
+    right: 'rgba(125,170,255,0.95)',
+    obs:   'rgba(190,130,255,0.95)',
+    shadow:'rgba(0,0,0,0.5)',
+    start: 'rgba(120,227,154,0.95)',
+    finish:'rgba(255,210,125,0.95)'
+  };
+
+  const canvas = document.getElementById('cv');
+  const ctx = canvas.getContext('2d');
+  const wrap = document.getElementById('canvasWrap');
+
+  const barFill = document.getElementById('barFill');
+  const statsEl = document.getElementById('stats');
+  const modeChip = document.getElementById('modeChip');
+
+  const overlay = document.getElementById('overlay');
+  const overlayText = document.getElementById('overlayText');
+  const overlayOk = document.getElementById('overlayOk');
+
+  const btn = {
+    eraseLeft: document.getElementById('eraseLeft'),
+    eraseRight: document.getElementById('eraseRight'),
+    eraseObs: document.getElementById('eraseObs'),
+
+    drawLeft: document.getElementById('drawLeft'),
+    drawRight: document.getElementById('drawRight'),
+    drawObs: document.getElementById('drawObs'),
+
+    placeStart: document.getElementById('placeStart'),
+    placeFinish: document.getElementById('placeFinish'),
+
+    undo: document.getElementById('undo'),
+    redo: document.getElementById('redo'),
+
+    clearAll: document.getElementById('clearAll'),
+    clearLeft: document.getElementById('clearLeft'),
+    clearRight: document.getElementById('clearRight'),
+    clearObs: document.getElementById('clearObs'),
+
+    saveImg: document.getElementById('saveImg')
+  };
+
+  let img = new Image();
+  let imgLoaded = false;
+
+  let view = { drawX:0, drawY:0, drawW:0, drawH:0, scale:1 };
+
+  const state = {
+    left:  { strokes: [] },
+    right: { strokes: [] },
+    obs:   { strokes: [] },
+    start: null,
+    finish: null
+  };
+
+  let tool = "draw_left";
+  let drawing = false;
+  let currentStroke = [];
+  let roadPromptShown = false;
+
+  let obsTouchedLeft = false;
+  let obsTouchedRight = false;
+
+  let lastDrawTool = "draw_left";
+
+  const history = { past: [], future: [] };
+
+  function showModal(message){
+    overlayText.textContent = message;
+    overlay.style.display = "flex";
+  }
+  function hideModal(){
+    overlay.style.display = "none";
+  }
+  overlayOk.addEventListener("click", hideModal);
+
+  function dist(a,b){ const dx=a.x-b.x, dy=a.y-b.y; return Math.sqrt(dx*dx+dy*dy); }
+  function polyLength(points){
+    let len=0;
+    for(let i=1;i<points.length;i++) len += dist(points[i-1], points[i]);
+    return len;
+  }
+  function strokeLength(stroke){ return polyLength(stroke); }
+  function layerLength(layer){ return layer.strokes.reduce((s, st) => s + strokeLength(st), 0); }
+  function totalCommittedLen(){ return layerLength(state.left) + layerLength(state.right) + layerLength(state.obs); }
+  function currentStrokeLen(){ return polyLength(currentStroke); }
+  function totalLiveLen(){ return totalCommittedLen() + (drawing && tool.startsWith("draw_") ? currentStrokeLen() : 0); }
+
+  function recomputeView(){
+    if(!imgLoaded) return;
+    const cw = canvas.clientWidth, ch = canvas.clientHeight;
+    const iw = img.naturalWidth, ih = img.naturalHeight;
+    const scale = Math.min(cw/iw, ch/ih);
+    const drawW = iw * scale, drawH = ih * scale;
+    const drawX = (cw - drawW)/2, drawY = (ch - drawH)/2;
+    view = { drawX, drawY, drawW, drawH, scale };
+  }
+
+  function canvasToImage(cx, cy){
+    if(!imgLoaded) return null;
+    recomputeView();
+    const x = (cx - view.drawX) / view.scale;
+    const y = (cy - view.drawY) / view.scale;
+    if(x<0 || y<0 || x>img.naturalWidth || y>img.naturalHeight) return null;
+    return { x, y };
+  }
+
+  function imageToCanvas(ix, iy){
+    return { x: view.drawX + ix * view.scale, y: view.drawY + iy * view.scale };
+  }
+
+  function onSegment(a, b, c){
+    return Math.min(a.x,b.x) - 1e-9 <= c.x && c.x <= Math.max(a.x,b.x) + 1e-9 &&
+           Math.min(a.y,b.y) - 1e-9 <= c.y && c.y <= Math.max(a.y,b.y) + 1e-9;
+  }
+  function orient(a,b,c){
+    const v = (b.y-a.y)*(c.x-b.x) - (b.x-a.x)*(c.y-b.y);
+    if (Math.abs(v) < 1e-9) return 0;
+    return v > 0 ? 1 : 2;
+  }
+  function segIntersectsRobust(p1,q1,p2,q2){
+    const o1 = orient(p1,q1,p2);
+    const o2 = orient(p1,q1,q2);
+    const o3 = orient(p2,q2,p1);
+    const o4 = orient(p2,q2,q1);
+
+    if(o1 !== o2 && o3 !== o4) return true;
+
+    if(o1 === 0 && onSegment(p1,q1,p2)) return true;
+    if(o2 === 0 && onSegment(p1,q1,q2)) return true;
+    if(o3 === 0 && onSegment(p2,q2,p1)) return true;
+    if(o4 === 0 && onSegment(p2,q2,q1)) return true;
+
+    return false;
+  }
+
+  function pointSegDist(p, a, b){
+    const vx = b.x - a.x, vy = b.y - a.y;
+    const wx = p.x - a.x, wy = p.y - a.y;
+    const c1 = vx*wx + vy*wy;
+    if(c1 <= 0) return dist(p,a);
+    const c2 = vx*vx + vy*vy;
+    if(c2 <= c1) return dist(p,b);
+    const t = c1 / c2;
+    const proj = { x: a.x + t*vx, y: a.y + t*vy };
+    return dist(p, proj);
+  }
+  function segTouchesSeg(a,b,c,d){
+    if(segIntersectsRobust(a,b,c,d)) return true;
+    const da = pointSegDist(a,c,d);
+    const db = pointSegDist(b,c,d);
+    const dc = pointSegDist(c,a,b);
+    const dd = pointSegDist(d,a,b);
+    return Math.min(da,db,dc,dd) <= TOUCH_EPS_PX;
+  }
+
+  function segmentIntersectsLayer(a,b, layer){
+    for(const st of layer.strokes){
+      if(st.length < 2) continue;
+      for(let i=1;i<st.length;i++){
+        if(segTouchesSeg(a,b, st[i-1], st[i])) return true;
+      }
+    }
+    return false;
+  }
+
+  function clipSegmentToRemaining(a, b, remaining){
+    const seg = dist(a,b);
+    if(seg <= remaining) return { ok:true, p:b, clipped:false };
+    if(remaining <= 0) return { ok:false };
+    const t = remaining / seg;
+    return { ok:true, p:{ x: a.x + (b.x-a.x)*t, y: a.y + (b.y-a.y)*t }, clipped:true };
+  }
+
+  function isRoadReady(){
+    return state.left.strokes.length > 0 && state.right.strokes.length > 0;
+  }
+
+  function snapshot(){
+    return {
+      tool, roadPromptShown,
+      left: state.left.strokes.map(st => st.map(p => ({x:p.x,y:p.y}))),
+      right: state.right.strokes.map(st => st.map(p => ({x:p.x,y:p.y}))),
+      obs: state.obs.strokes.map(st => st.map(p => ({x:p.x,y:p.y}))),
+      start: state.start ? {x:state.start.x,y:state.start.y} : null,
+      finish: state.finish ? {x:state.finish.x,y:state.finish.y} : null
+    };
+  }
+  function applySnapshot(s){
+    tool = s.tool;
+    roadPromptShown = !!s.roadPromptShown;
+
+    state.left.strokes = s.left.map(st => st.map(p => ({x:p.x,y:p.y})));
+    state.right.strokes = s.right.map(st => st.map(p => ({x:p.x,y:p.y})));
+    state.obs.strokes = s.obs.map(st => st.map(p => ({x:p.x,y:p.y})));
+    state.start = s.start ? {x:s.start.x,y:s.start.y} : null;
+    state.finish = s.finish ? {x:s.finish.x,y:s.finish.y} : null;
+
+    hideModal();
+  }
+  function pushHistory(){ history.past.push(snapshot()); history.future = []; }
+  function canUndo(){ return history.past.length > 0; }
+  function canRedo(){ return history.future.length > 0; }
+  function undo(){
+    if(!canUndo()) return;
+    history.future.push(snapshot());
+    applySnapshot(history.past.pop());
+    drawing = false; currentStroke = [];
+    obsTouchedLeft = false; obsTouchedRight = false;
+    redraw(); updateUI();
+  }
+  function redo(){
+    if(!canRedo()) return;
+    history.past.push(snapshot());
+    applySnapshot(history.future.pop());
+    drawing = false; currentStroke = [];
+    obsTouchedLeft = false; obsTouchedRight = false;
+    redraw(); updateUI();
+  }
+
+  function drawStroke(points, color){
+    if(points.length < 2) return;
+    ctx.save();
+    ctx.beginPath();
+    const p0 = imageToCanvas(points[0].x, points[0].y);
+    ctx.moveTo(p0.x, p0.y);
+    for(let i=1;i<points.length;i++){
+      const p = imageToCanvas(points[i].x, points[i].y);
+      ctx.lineTo(p.x, p.y);
+    }
+    ctx.lineWidth = DRAW_WIDTH_SCREEN;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = color;
+    ctx.stroke();
+    ctx.lineWidth = Math.max(1, DRAW_WIDTH_SCREEN/2.5);
+    ctx.strokeStyle = COLORS.shadow;
+    ctx.stroke();
+    ctx.restore();
+  }
+  function drawLayer(layer, color){
+    for(const st of layer.strokes) drawStroke(st, color);
+  }
+  function drawMarker(pt, fill, label){
+    if(!pt) return;
+    const c = imageToCanvas(pt.x, pt.y);
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, START_FINISH_RADIUS_SCREEN, 0, Math.PI*2);
+    ctx.fillStyle = fill;
+    ctx.fill();
+    ctx.lineWidth = START_FINISH_STROKE_SCREEN;
+    ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+    ctx.stroke();
+    ctx.font = '12px system-ui, -apple-system, Segoe UI, Roboto, Arial';
+    ctx.fillStyle = 'rgba(0,0,0,0.85)';
+    ctx.fillText(label, c.x + 12, c.y + 4);
+    ctx.fillStyle = fill;
+    ctx.fillText(label, c.x + 11, c.y + 3);
+    ctx.restore();
+  }
+
+  function redraw(){
+    const cw = canvas.clientWidth, ch = canvas.clientHeight;
+    ctx.clearRect(0,0,cw,ch);
+
+    if(!imgLoaded){
+      ctx.save();
+      ctx.fillStyle = '#0b0c10';
+      ctx.fillRect(0,0,cw,ch);
+      ctx.fillStyle = '#b7bcc9';
+      ctx.font = '14px system-ui, -apple-system, Segoe UI, Roboto, Arial';
+      ctx.fillText('Фон загружается…', 18, 28);
+      ctx.restore();
+      return;
+    }
+
+    ctx.drawImage(img, view.drawX, view.drawY, view.drawW, view.drawH);
+
+    drawLayer(state.left, COLORS.left);
+    drawLayer(state.right, COLORS.right);
+    drawLayer(state.obs, COLORS.obs);
+
+    if(currentStroke.length > 1){
+      let col = COLORS.obs;
+      if(tool === "draw_left") col = COLORS.left;
+      if(tool === "draw_right") col = COLORS.right;
+      if(tool === "draw_obs") col = COLORS.obs;
+      if(tool.startsWith("erase_")) col = 'rgba(255,255,255,0.35)';
+      drawStroke(currentStroke, col);
+    }
+
+    drawMarker(state.start, COLORS.start, "START");
+    drawMarker(state.finish, COLORS.finish, "FINISH");
+  }
+
+  function clearActive(){
+    for(const k of ["drawLeft","drawRight","drawObs","placeStart","placeFinish","eraseLeft","eraseRight","eraseObs"]){
+      btn[k].classList.remove("activeBtn");
+    }
+  }
+  function markActive(){
+    clearActive();
+    const map = {
+      draw_left: "drawLeft",
+      draw_right: "drawRight",
+      draw_obs: "drawObs",
+      place_start: "placeStart",
+      place_finish: "placeFinish",
+      erase_left: "eraseLeft",
+      erase_right:"eraseRight",
+      erase_obs: "eraseObs"
+    };
+    const id = map[tool];
+    if(id && btn[id]) btn[id].classList.add("activeBtn");
+  }
+
+  function setModeChip(){
+    if(!imgLoaded){
+      modeChip.innerHTML = `Режим: <strong>загрузка фона</strong>`;
+      return;
+    }
+    const road = isRoadReady() ? '<span class="ok">дорога готова</span>' : '<span class="warn">дорога не готова</span>';
+    const toolLabel = {
+      draw_left:  "рисование (левая)",
+      draw_right: "рисование (правая)",
+      draw_obs:   "рисование (препятствия)",
+      erase_left: "ластик (левая)",
+      erase_right:"ластик (правая)",
+      erase_obs:  "ластик (препятствия)",
+      place_start:"поставить START",
+      place_finish:"поставить FINISH"
+    }[tool] || "—";
+    modeChip.innerHTML = `Инструмент: <strong>${toolLabel}</strong> • ${road}`;
+  }
+
+  function obsCount(){ return state.obs.strokes.length; }
+
+  function updateButtons(){
+    const any = state.left.strokes.length || state.right.strokes.length || state.obs.strokes.length || state.start || state.finish;
+
+    btn.undo.disabled = !imgLoaded || !canUndo();
+    btn.redo.disabled = !imgLoaded || !canRedo();
+
+    btn.clearAll.disabled = !imgLoaded || !any;
+    btn.clearLeft.disabled = !imgLoaded || state.left.strokes.length === 0;
+    btn.clearRight.disabled = !imgLoaded || state.right.strokes.length === 0;
+    btn.clearObs.disabled = !imgLoaded || state.obs.strokes.length === 0;
+
+    btn.saveImg.disabled = !imgLoaded;
+
+    const road = isRoadReady();
+    btn.placeStart.disabled = !imgLoaded || !road;
+    btn.placeFinish.disabled = !imgLoaded || !road;
+    btn.drawObs.disabled = !imgLoaded || !road || obsCount() >= MAX_OBS_STROKES;
+
+    btn.drawLeft.disabled = !imgLoaded;
+    btn.drawRight.disabled = !imgLoaded;
+  }
+
+  function clamp01(x){ return Math.max(0, Math.min(1, x)); }
+  function lerp(a,b,t){ return a + (b-a)*t; }
+  function lerpRGB(c1, c2, t){
+    const r = Math.round(lerp(c1[0], c2[0], t));
+    const g = Math.round(lerp(c1[1], c2[1], t));
+    const b = Math.round(lerp(c1[2], c2[2], t));
+    return `rgb(${r},${g},${b})`;
+  }
+  function progressColor(p){
+    p = clamp01(p);
+    const green = [118,227,154];
+    const yellow = [255,210,125];
+    const red = [255,125,125];
+    if(p <= 0.5) return lerpRGB(green, yellow, p/0.5);
+    return lerpRGB(yellow, red, (p-0.5)/0.5);
+  }
+
+  function updateStats(){
+    if(!imgLoaded){
+      statsEl.innerHTML = `<div>Статус: <span class="warn">фон загружается</span></div><div>Сумма: — / ${MAX_TOTAL} px</div>`;
+      barFill.style.width = '0%';
+      barFill.style.background = progressColor(0);
+      return;
+    }
+
+    const l = layerLength(state.left);
+    const r = layerLength(state.right);
+    const o = layerLength(state.obs);
+
+    const liveTotal = totalLiveLen();
+    const p = clamp01(liveTotal / MAX_TOTAL);
+    const pct = Math.min(100, p * 100);
+
+    let statusClass = 'ok';
+    let statusText = 'можно рисовать';
+    if(liveTotal >= MAX_TOTAL - 1e-6) { statusClass = 'bad'; statusText = 'лимит достигнут'; }
+
+    const road = isRoadReady();
+    const roadText = road ? '<span class="ok">готова</span>' : '<span class="warn">не готова</span>';
+    const startText = state.start ? '<span class="ok">есть</span>' : '<span class="warn">нет</span>';
+    const finishText = state.finish ? '<span class="ok">есть</span>' : '<span class="warn">нет</span>';
+
+    statsEl.innerHTML = `
+      <div>Статус: <span class="${statusClass}">${statusText}</span></div>
+      <div>Дорога: ${roadText}</div>
+      <div>Левая: <strong>${Math.round(l)}</strong> px</div>
+      <div>Правая: <strong>${Math.round(r)}</strong> px</div>
+      <div>Препятствия: <strong>${Math.round(o)}</strong> px • <strong>${obsCount()}</strong> / ${MAX_OBS_STROKES} штрихов</div>
+      <div>Сумма: <strong>${Math.round(liveTotal)}</strong> / ${MAX_TOTAL} px</div>
+      <div>START: ${startText} • FINISH: ${finishText}</div>
+    `;
+    barFill.style.width = pct.toFixed(1) + '%';
+    barFill.style.background = progressColor(p);
+  }
+
+  function updateUI(){
+    setModeChip();
+    updateButtons();
+    updateStats();
+    markActive();
+  }
+
+  function splitStrokeByEraser(stroke, center, radius){
+    const res = [];
+    let cur = [];
+    for(const p of stroke){
+      if(dist(p, center) <= radius){
+        if(cur.length >= 2) res.push(cur);
+        cur = [];
+      } else {
+        cur.push(p);
+      }
+    }
+    if(cur.length >= 2) res.push(cur);
+    return res;
+  }
+  function eraseInLayer(layer, center, radius){
+    const out = [];
+    for(const st of layer.strokes){
+      const pieces = splitStrokeByEraser(st, center, radius);
+      for(const p of pieces) out.push(p);
+    }
+    layer.strokes = out;
+  }
+
+  function commitStrokeToLayer(layer){
+    if(currentStroke.length < 2) return;
+    layer.strokes.push(currentStroke.map(p => ({x:p.x,y:p.y})));
+  }
+
+  function deleteCurrentObstacleWithNotice(){
+    drawing = false;
+    currentStroke = [];
+    obsTouchedLeft = false;
+    obsTouchedRight = false;
+    redraw();
+    updateUI();
+    showModal(
+      "Препятствие удалено.\n" +
+      "Оно пересекло обе границы дороги (и левую, и правую).\n" +
+      "Сделай препятствие так, чтобы оно не перекрывало дорогу полностью."
+    );
+  }
+
+  function finishStroke(commit){
+    if(!drawing) return;
+    drawing = false;
+
+    const rightWasEmpty = state.right.strokes.length === 0;
+
+    if(commit && currentStroke.length >= 2){
+      if(tool === "draw_left")  commitStrokeToLayer(state.left);
+      if(tool === "draw_right") commitStrokeToLayer(state.right);
+      if(tool === "draw_obs"){
+        if(obsTouchedLeft && obsTouchedRight){
+          currentStroke = [];
+          obsTouchedLeft = false;
+          obsTouchedRight = false;
+          redraw();
+          updateUI();
+          showModal(
+            "Препятствие удалено.\n" +
+            "Оно пересекло обе границы дороги (и левую, и правую).\n" +
+            "Сделай препятствие так, чтобы оно не перекрывало дорогу полностью."
+          );
+          return;
+        }
+        commitStrokeToLayer(state.obs);
+      }
+    }
+
+    currentStroke = [];
+    obsTouchedLeft = false;
+    obsTouchedRight = false;
+
+    if(tool === "draw_left" && state.left.strokes.length > 0 && state.right.strokes.length === 0){
+      tool = "draw_right";
+      lastDrawTool = "draw_right";
+      redraw();
+      updateUI();
+      return;
+    }
+
+    if(tool === "draw_right"){
+      lastDrawTool = "draw_right";
+      if(rightWasEmpty && state.right.strokes.length > 0 && state.left.strokes.length > 0){
+        tool = "draw_obs";
+        lastDrawTool = "draw_obs";
+        if(!roadPromptShown){
+          roadPromptShown = true;
+          showModal(
+            "Дорога готова, теперь тебе нужно расставить препятствия.\n" +
+            "Когда закончишь — поставь START и FINISH слева через управление."
+          );
+        }
+        redraw();
+        updateUI();
+        return;
+      }
+    } else if(tool === "draw_obs") {
+      lastDrawTool = "draw_obs";
+    } else if(tool === "draw_left") {
+      lastDrawTool = "draw_left";
+    }
+
+    redraw();
+    updateUI();
+  }
+
+  function checkObstacleIntersectionsSegment(a, b){
+    if(segmentIntersectsLayer(a,b,state.left)) obsTouchedLeft = true;
+    if(segmentIntersectsLayer(a,b,state.right)) obsTouchedRight = true;
+    return obsTouchedLeft && obsTouchedRight;
+  }
+
+  function checkObstacleIntersectionsInterpolated(a, b){
+    const d = dist(a,b);
+    if(d <= 1e-9) return false;
+    const steps = Math.max(1, Math.ceil(d / INTERP_STEP_PX));
+    let prev = a;
+    for(let i=1;i<=steps;i++){
+      const t = i / steps;
+      const cur = { x: a.x + (b.x-a.x)*t, y: a.y + (b.y-a.y)*t };
+      if(checkObstacleIntersectionsSegment(prev, cur)) return true;
+      prev = cur;
+    }
+    return false;
+  }
+
+  function minSegForTool(){
+    if(tool === "draw_obs") return MIN_SEG_OBS;
+    return MIN_SEG_LINES;
+  }
+
+  function remainingBudgetForLive(){
+    return MAX_TOTAL - totalCommittedLen() - (drawing && tool.startsWith("draw_") ? currentStrokeLen() : 0);
+  }
+
+  function tryAddPointDraw(pt){
+    if(!drawing) return;
+
+    const last = currentStroke[currentStroke.length - 1];
+
+    if(tool === "draw_obs"){
+      if(checkObstacleIntersectionsInterpolated(last, pt)){
+        deleteCurrentObstacleWithNotice();
+        return;
+      }
+    }
+
+    const seg = dist(last, pt);
+    const minSeg = minSegForTool();
+
+    if(seg < minSeg){
+      updateStats();
+      return;
+    }
+
+    const rem = remainingBudgetForLive();
+    const clipped = clipSegmentToRemaining(last, pt, rem);
+    if(!clipped.ok){
+      finishStroke(true);
+      return;
+    }
+    const nextPt = clipped.p;
+
+    if(tool === "draw_obs"){
+      if(checkObstacleIntersectionsInterpolated(last, nextPt)){
+        deleteCurrentObstacleWithNotice();
+        return;
+      }
+    }
+
+    currentStroke.push(nextPt);
+    redraw();
+    updateStats();
+
+    if(clipped.clipped){
+      finishStroke(true);
+    }
+  }
+
+  function placeMarker(pt){
+    if(!isRoadReady()) return;
+    pushHistory();
+    if(tool === "place_start") state.start = pt;
+    if(tool === "place_finish") state.finish = pt;
+    tool = lastDrawTool;
+    hideModal();
+    redraw();
+    updateUI();
+  }
+
+  function clearWhich(which){
+    pushHistory();
+
+    if(which === "all"){
+      state.left.strokes = [];
+      state.right.strokes = [];
+      state.obs.strokes = [];
+      state.start = null;
+      state.finish = null;
+      tool = "draw_left";
+      lastDrawTool = "draw_left";
+      roadPromptShown = false;
+      hideModal();
+    } else if(which === "left"){
+      state.left.strokes = [];
+      state.start = null;
+      state.finish = null;
+      roadPromptShown = false;
+      if(tool === "draw_obs" || tool === "place_start" || tool === "place_finish") tool = "draw_left";
+      lastDrawTool = tool.startsWith("draw_") ? tool : "draw_left";
+      hideModal();
+    } else if(which === "right"){
+      state.right.strokes = [];
+      state.start = null;
+      state.finish = null;
+      roadPromptShown = false;
+      if(tool === "draw_obs" || tool === "place_start" || tool === "place_finish") tool = (state.left.strokes.length ? "draw_right" : "draw_left");
+      lastDrawTool = tool.startsWith("draw_") ? tool : (state.left.strokes.length ? "draw_right" : "draw_left");
+      hideModal();
+    } else if(which === "obs"){
+      state.obs.strokes = [];
+      hideModal();
+    }
+
+    drawing = false;
+    currentStroke = [];
+    obsTouchedLeft = false;
+    obsTouchedRight = false;
+
+    redraw();
+    updateUI();
+  }
+
+  function saveCanvasAsPNG(){
+    if(!imgLoaded) return;
+
+    const iw = img.naturalWidth, ih = img.naturalHeight;
+    const off = document.createElement('canvas');
+    off.width = iw; off.height = ih;
+    const c = off.getContext('2d');
+
+    c.drawImage(img, 0, 0, iw, ih);
+
+    function drawNativeStroke(stroke, strokeStyle){
+      if(stroke.length < 2) return;
+      c.save();
+      c.beginPath();
+      c.moveTo(stroke[0].x, stroke[0].y);
+      for(let i=1;i<stroke.length;i++) c.lineTo(stroke[i].x, stroke[i].y);
+      c.lineWidth = 6;
+      c.lineCap = 'round';
+      c.lineJoin = 'round';
+      c.strokeStyle = strokeStyle;
+      c.stroke();
+      c.lineWidth = 2;
+      c.strokeStyle = 'rgba(0,0,0,0.45)';
+      c.stroke();
+      c.restore();
+    }
+    function drawNativeLayer(layer, color){
+      for(const st of layer.strokes) drawNativeStroke(st, color);
+    }
+
+    drawNativeLayer(state.left, COLORS.left);
+    drawNativeLayer(state.right, COLORS.right);
+    drawNativeLayer(state.obs, COLORS.obs);
+
+    function drawNativeMarker(pt, fill, label){
+      if(!pt) return;
+      c.save();
+      c.beginPath();
+      c.arc(pt.x, pt.y, 14, 0, Math.PI*2);
+      c.fillStyle = fill;
+      c.fill();
+      c.lineWidth = 4;
+      c.strokeStyle = 'rgba(0,0,0,0.55)';
+      c.stroke();
+      c.font = '16px system-ui, -apple-system, Segoe UI, Roboto, Arial';
+      c.fillStyle = 'rgba(0,0,0,0.85)';
+      c.fillText(label, pt.x + 18, pt.y + 6);
+      c.fillStyle = fill;
+      c.fillText(label, pt.x + 17, pt.y + 5);
+      c.restore();
+    }
+    drawNativeMarker(state.start, COLORS.start, "START");
+    drawNativeMarker(state.finish, COLORS.finish, "FINISH");
+
+    const url = off.toDataURL('image/png');
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'road.png';
+    a.click();
+  }
+
+  function setTool(next){
+    if(next === "draw_obs" && !isRoadReady()) return;
+
+    if(next === "draw_obs" && obsCount() >= MAX_OBS_STROKES){
+      showModal(`Достигнут лимит препятствий: ${MAX_OBS_STROKES} штрихов.`);
+      return;
+    }
+
+    if(next.startsWith("draw_")) lastDrawTool = next;
+
+    tool = next;
+    drawing = false;
+    currentStroke = [];
+    obsTouchedLeft = false;
+    obsTouchedRight = false;
+    updateUI();
+    redraw();
+  }
+
+  btn.drawLeft.addEventListener('click', () => setTool("draw_left"));
+  btn.drawRight.addEventListener('click', () => setTool("draw_right"));
+  btn.drawObs.addEventListener('click', () => setTool("draw_obs"));
+  btn.placeStart.addEventListener('click', () => setTool("place_start"));
+  btn.placeFinish.addEventListener('click', () => setTool("place_finish"));
+
+  btn.eraseLeft.addEventListener('click', () => setTool("erase_left"));
+  btn.eraseRight.addEventListener('click', () => setTool("erase_right"));
+  btn.eraseObs.addEventListener('click', () => setTool("erase_obs"));
+
+  btn.undo.addEventListener('click', undo);
+  btn.redo.addEventListener('click', redo);
+
+  btn.clearAll.addEventListener('click', () => clearWhich("all"));
+  btn.clearLeft.addEventListener('click', () => clearWhich("left"));
+  btn.clearRight.addEventListener('click', () => clearWhich("right"));
+  btn.clearObs.addEventListener('click', () => clearWhich("obs"));
+
+  btn.saveImg.addEventListener('click', saveCanvasAsPNG);
+
+  function resizeCanvasToContainer(){
+    const rect = wrap.getBoundingClientRect();
+    const w = Math.max(300, Math.floor(rect.width));
+    const h = Math.max(300, Math.floor(rect.height));
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.floor(w * dpr);
+    canvas.height = Math.floor(h * dpr);
+    canvas.style.width = w + 'px';
+    canvas.style.height = h + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    recomputeView();
+    redraw();
+  }
+  const ro = new ResizeObserver(resizeCanvasToContainer);
+  ro.observe(wrap);
+
+  canvas.addEventListener('mousedown', (ev) => {
+    if(!imgLoaded) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const pt = canvasToImage(ev.clientX - rect.left, ev.clientY - rect.top);
+    if(!pt) return;
+
+    if(tool === "place_start" || tool === "place_finish"){
+      if(!isRoadReady()){
+        showModal("Сначала нарисуй левую и правую линии.");
+        return;
+      }
+      placeMarker(pt);
+      return;
+    }
+
+    if(tool === "draw_obs"){
+      if(!isRoadReady()) return;
+      if(obsCount() >= MAX_OBS_STROKES){
+        showModal(`Достигнут лимит препятствий: ${MAX_OBS_STROKES} штрихов.`);
+        return;
+      }
+    }
+
+    if(tool.startsWith("draw_") && totalCommittedLen() >= MAX_TOTAL - 1e-6) return;
+
+    if(tool.startsWith("erase_")){
+      pushHistory();
+      drawing = true;
+      currentStroke = [pt];
+
+      if(tool === "erase_left") eraseInLayer(state.left, pt, ERASE_RADIUS_PX);
+      if(tool === "erase_right") eraseInLayer(state.right, pt, ERASE_RADIUS_PX);
+      if(tool === "erase_obs") eraseInLayer(state.obs, pt, ERASE_RADIUS_PX);
+
+      redraw();
+      updateUI();
+      return;
+    }
+
+    drawing = true;
+    currentStroke = [pt];
+    obsTouchedLeft = false;
+    obsTouchedRight = false;
+
+    redraw();
+    updateStats();
+  });
+
+  canvas.addEventListener('mousemove', (ev) => {
+    if(!drawing || !imgLoaded) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const pt = canvasToImage(ev.clientX - rect.left, ev.clientY - rect.top);
+    if(!pt) return;
+
+    if(tool.startsWith("erase_")){
+      currentStroke.push(pt);
+
+      if(tool === "erase_left") eraseInLayer(state.left, pt, ERASE_RADIUS_PX);
+      if(tool === "erase_right") eraseInLayer(state.right, pt, ERASE_RADIUS_PX);
+      if(tool === "erase_obs") eraseInLayer(state.obs, pt, ERASE_RADIUS_PX);
+
+      redraw();
+      updateUI();
+      return;
+    }
+
+    tryAddPointDraw(pt);
+  });
+
+  window.addEventListener('mouseup', () => {
+    if(!drawing) return;
+
+    if(tool.startsWith("erase_")){
+      drawing = false;
+      currentStroke = [];
+      obsTouchedLeft = false;
+      obsTouchedRight = false;
+      updateUI();
+      return;
+    }
+
+    if(currentStroke.length >= 2){
+      if(tool === "draw_obs" && obsCount() >= MAX_OBS_STROKES){
+        drawing = false;
+        currentStroke = [];
+        obsTouchedLeft = false;
+        obsTouchedRight = false;
+        redraw();
+        updateUI();
+        showModal(`Достигнут лимит препятствий: ${MAX_OBS_STROKES} штрихов.`);
+        return;
+      }
+      pushHistory();
+      finishStroke(true);
+    } else {
+      finishStroke(false);
+    }
+  });
+
+  window.addEventListener('keydown', (ev) => {
+    if(ev.key === 'Escape'){
+      drawing = false;
+      currentStroke = [];
+      obsTouchedLeft = false;
+      obsTouchedRight = false;
+      redraw();
+      updateUI();
+      return;
+    }
+
+    if(ev.code === "Digit1"){ setTool("draw_left"); return; }
+    if(ev.code === "Digit2"){ setTool("draw_right"); return; }
+    if(ev.code === "Digit3"){ setTool("draw_obs"); return; }
+    if(ev.code === "Digit4"){ setTool("place_start"); return; }
+    if(ev.code === "Digit5"){ setTool("place_finish"); return; }
+
+    const ctrl = ev.ctrlKey || ev.metaKey;
+    if(!ctrl) return;
+
+    if(ev.code === 'KeyZ' && !ev.shiftKey){
+      ev.preventDefault();
+      undo();
+      return;
+    }
+    if(ev.code === 'KeyY' || (ev.code === 'KeyZ' && ev.shiftKey)){
+      ev.preventDefault();
+      redo();
+      return;
+    }
+  }, true);
+
+  function updateAfterAny(){
+    redraw();
+    updateUI();
+  }
+
+  function init(){
+    img = new Image();
+    imgLoaded = false;
+    img.crossOrigin = "anonymous";
+
+    img.onload = () => {
+      imgLoaded = true;
+      resizeCanvasToContainer();
+      updateAfterAny();
+    };
+
+    img.onerror = () => {
+      imgLoaded = false;
+      resizeCanvasToContainer();
+      updateAfterAny();
+      alert("Не удалось загрузить фон: " + BACKGROUND_SRC);
+    };
+
+    img.src = BACKGROUND_SRC;
+    resizeCanvasToContainer();
+    updateAfterAny();
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>
